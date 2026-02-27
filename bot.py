@@ -1,7 +1,6 @@
 import os
 import telebot
 import replicate
-import openai
 import time
 import logging
 
@@ -12,19 +11,15 @@ logger = logging.getLogger(__name__)
 # Токены из переменных окружения
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 REPLICATE_TOKEN = os.environ.get('REPLICATE_TOKEN')
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 
 # Проверка токенов
-if not BOT_TOKEN or not REPLICATE_TOKEN or not OPENAI_API_KEY:
-    missing = []
-    if not BOT_TOKEN: missing.append('BOT_TOKEN')
-    if not REPLICATE_TOKEN: missing.append('REPLICATE_TOKEN')
-    if not OPENAI_API_KEY: missing.append('OPENAI_API_KEY')
-    raise ValueError(f"❌ Отсутствуют токены: {', '.join(missing)}")
+if not BOT_TOKEN:
+    raise ValueError("❌ Отсутствует BOT_TOKEN")
+if not REPLICATE_TOKEN:
+    raise ValueError("❌ Отсутствует REPLICATE_TOKEN")
 
-# Устанавливаем токены
+# Устанавливаем токен Replicate
 os.environ["REPLICATE_API_TOKEN"] = REPLICATE_TOKEN
-openai.api_key = OPENAI_API_KEY
 
 # Создаем бота
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -37,11 +32,10 @@ logger.info("✅ Бот инициализирован")
 def start(message):
     """Приветствие и инструкции"""
     welcome_text = (
-        "👋 Привет! Я SceneForgeBot (полная версия)!\n\n"
+        "👋 Привет! Я SceneForgeBot (версия для фото и видео)!\n\n"
         "📸 **Отправь фото** — я оживлю его (сделаю видео)\n"
-        "🎬 **/video текст** — видео из текста\n"
-        "💬 **Просто напиши** — я отвечу как ChatGPT\n\n"
-        "⚡ Все функции работают!"
+        "🎬 **/video текст** — видео из текста\n\n"
+        "⚡ Функции работают!"
     )
     bot.reply_to(message, welcome_text)
     logger.info(f"Команда /start от пользователя {message.from_user.id}")
@@ -77,7 +71,7 @@ def generate_video(message):
         logger.error(f"Ошибка видео: {str(e)}")
 
 # ============================================
-# ОЖИВЛЕНИЕ ФОТО (ИСПРАВЛЕНО)
+# ОЖИВЛЕНИЕ ФОТО
 # ============================================
 @bot.message_handler(content_types=['photo'])
 def animate_photo(message):
@@ -102,7 +96,7 @@ def animate_photo(message):
                 "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
                 input={
                     "input_image": f,
-                    "video_length": "14",  # ИСПРАВЛЕНО: теперь строка
+                    "video_length": "14",
                     "sizing_strategy": "maintain_aspect_ratio",
                     "frames_per_second": 6
                 }
@@ -129,35 +123,6 @@ def animate_photo(message):
             pass
 
 # ============================================
-# ОБЩЕНИЕ ЧЕРЕЗ OPENAI
-# ============================================
-@bot.message_handler(func=lambda message: True)
-def chat(message):
-    """Обычный чат с ChatGPT"""
-    bot.send_chat_action(message.chat.id, 'typing')
-    logger.info(f"Чат-запрос от пользователя {message.from_user.id}: {message.text[:50]}...")
-    
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Ты дружелюбный помощник по имени SceneForgeBot. Ты умеешь оживлять фото и делать видео из текста."},
-                {"role": "user", "content": message.text}
-            ],
-            max_tokens=500,
-            temperature=0.7
-        )
-        
-        answer = response.choices[0].message.content
-        bot.reply_to(message, answer)
-        logger.info(f"Ответ отправлен пользователю {message.from_user.id}")
-        
-    except Exception as e:
-        error_msg = f"❌ Ошибка OpenAI: {str(e)}"
-        bot.reply_to(message, error_msg)
-        logger.error(f"Ошибка OpenAI: {str(e)}")
-
-# ============================================
 # ЗАПУСК БОТА
 # ============================================
 if __name__ == "__main__":
@@ -165,7 +130,6 @@ if __name__ == "__main__":
     logger.info("🚀 Бот запускается...")
     logger.info(f"🤖 Bot Token: {'✅' if BOT_TOKEN else '❌'}")
     logger.info(f"🔄 Replicate Token: {'✅' if REPLICATE_TOKEN else '❌'}")
-    logger.info(f"🤖 OpenAI Key: {'✅' if OPENAI_API_KEY else '❌'}")
     logger.info("=" * 50)
     
     # Бесконечный цикл с обработкой ошибок

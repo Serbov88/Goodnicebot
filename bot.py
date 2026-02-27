@@ -23,14 +23,12 @@ def start(message):
 def generate(message):
     msg = bot.reply_to(message, "🎥 Генерирую видео...")
     try:
-        # Правильная модель Kling
         output = replicate.run(
             "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
             input={"prompt": message.text}
         )
         bot.delete_message(message.chat.id, msg.message_id)
         
-        # Отправляем результат
         if output and isinstance(output, list):
             bot.send_message(message.chat.id, f"✅ Видео готово!\n{output[0]}")
         elif output:

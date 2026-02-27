@@ -23,12 +23,21 @@ def start(message):
 def generate(message):
     msg = bot.reply_to(message, "🎥 Генерирую видео...")
     try:
+        # Правильная модель Kling
         output = replicate.run(
-            ""kling-ai/kling-video:v1.6"",
+            "kling-ai/kling-video:v1.6",
             input={"prompt": message.text}
         )
         bot.delete_message(message.chat.id, msg.message_id)
-        bot.send_message(message.chat.id, f"✅ Видео готово!\n{output}")
+        
+        # Отправляем результат
+        if output and isinstance(output, list):
+            bot.send_message(message.chat.id, f"✅ Видео готово!\n{output[0]}")
+        elif output:
+            bot.send_message(message.chat.id, f"✅ Видео готово!\n{output}")
+        else:
+            bot.send_message(message.chat.id, "❌ Не удалось получить видео")
+            
     except Exception as e:
         bot.edit_message_text(f"❌ Ошибка: {str(e)}", message.chat.id, msg.message_id)
 

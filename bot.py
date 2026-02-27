@@ -24,7 +24,7 @@ def generate(message):
     msg = bot.reply_to(message, "🎥 Генерирую видео...")
     try:
         output = replicate.run(
-            "lucataco/animate-diff:beecf59c4aee8d81bf04f0381033dfa10dc16e845b4ae00d281e2fa377e48a9f",
+            ""kling-ai/kling-video:v1.6"",
             input={"prompt": message.text}
         )
         bot.delete_message(message.chat.id, msg.message_id)

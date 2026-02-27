@@ -3,7 +3,6 @@ import telebot
 import replicate
 import time
 import logging
-import requests
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -33,8 +32,8 @@ logger.info("✅ Бот инициализирован")
 def start(message):
     """Приветствие и инструкции"""
     welcome_text = (
-        "👋 Привет! Я SceneForgeBot (версия с Haiper)!\n\n"
-        "📸 **Отправь фото** — я оживлю его через Haiper\n"
+        "👋 Привет! Я SceneForgeBot (финальная версия)!\n\n"
+        "📸 **Отправь фото** — я оживлю его\n"
         "🎬 **/video текст** — видео из текста\n\n"
         "⚡ Все функции работают!"
     )
@@ -80,12 +79,12 @@ def generate_video(message):
         logger.error(f"Ошибка видео: {str(e)}")
 
 # ============================================
-# ОЖИВЛЕНИЕ ФОТО ЧЕРЕЗ HAIPER (Новая версия)
+# ОЖИВЛЕНИЕ ФОТО ЧЕРЕЗ MINIMAX
 # ============================================
 @bot.message_handler(content_types=['photo'])
 def animate_photo(message):
-    """Оживление фотографии через Haiper (не требует video_length)"""
-    msg = bot.reply_to(message, "🎬 Оживляю фото через Haiper... Это займет около минуты")
+    """Оживление фотографии через Minimax"""
+    msg = bot.reply_to(message, "🎬 Оживляю фото через Minimax... Это займет около минуты")
     logger.info(f"Получено фото от пользователя {message.from_user.id}")
     
     temp_filename = None
@@ -101,68 +100,41 @@ def animate_photo(message):
         with open(temp_filename, 'wb') as f:
             f.write(photo)
         
-        # 3. Отправляем через прямой API-запрос к Haiper
+        # 3. Отправляем в Minimax
         with open(temp_filename, 'rb') as f:
-            # Сначала загружаем файл на Replicate
-            files = {'file': f}
-            upload_response = requests.post(
-                "https://api.replicate.com/v1/files",
-                headers={"Authorization": f"Token {REPLICATE_TOKEN}"},
-                files=files
+            output = replicate.run(
+                "minimax/video-01:latest",
+                input={
+                    "prompt": "make this photo come alive, natural movement",
+                    "image": f
+                }
             )
-            
-            if upload_response.status_code == 201:
-                file_url = upload_response.json()['urls']['get']
-                logger.info(f"Фото загружено, URL: {file_url[:50]}...")
-                
-                # Создаём предсказание с Haiper (не требует video_length)
-                prediction_response = requests.post(
-                    "https://api.replicate.com/v1/predictions",
-                    headers={
-                        "Authorization": f"Token {REPLICATE_TOKEN}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "version": "haiper-ai/haiper-video-2:latest",
-                        "input": {
-                            "image": file_url,
-                            "prompt": "make the person move naturally, subtle animation"
-                        }
-                    }
-                )
-                
-                if prediction_response.status_code == 201:
-                    data = prediction_response.json()
-                    bot.delete_message(message.chat.id, msg.message_id)
-                    
-                    # Отправляем информацию о начале обработки
-                    bot.send_message(
-                        message.chat.id, 
-                        f"✅ Фото в обработке через Haiper!\n"
-                        f"ID: `{data['id']}`\n"
-                        f"Статус: {data['status']}\n\n"
-                        f"Видео будет готово через 1-2 минуты.\n"
-                        f"Ссылка для проверки: {data['urls']['get']}"
-                    )
-                    logger.info(f"Предсказание создано, ID: {data['id']}")
-                    
-                else:
-                    error_msg = f"❌ Ошибка Haiper: {prediction_response.status_code}\n{prediction_response.text[:200]}"
-                    bot.edit_message_text(error_msg, message.chat.id, msg.message_id)
-                    logger.error(f"Ошибка создания предсказания: {prediction_response.text[:200]}")
-            else:
-                error_msg = f"❌ Ошибка загрузки фото: {upload_response.status_code}"
-                bot.edit_message_text(error_msg, message.chat.id, msg.message_id)
-                logger.error(f"Ошибка загрузки: {upload_response.status_code}")
         
         # 4. Удаляем временный файл
         if temp_filename and os.path.exists(temp_filename):
             os.remove(temp_filename)
             logger.info("Временный файл удален")
         
+        # 5. Отправляем результат
+        bot.delete_message(message.chat.id, msg.message_id)
+        
+        if isinstance(output, list):
+            video_url = output[0]
+        else:
+            video_url = output
+            
+        bot.send_message(message.chat.id, f"✅ Фото ожило!\n{video_url}")
+        logger.info(f"Фото успешно оживлено для пользователя {message.from_user.id}")
+        
     except Exception as e:
         error_text = f"❌ Ошибка оживления: {str(e)}"
-        bot.edit_message_text(error_text, message.chat.id, msg.message_id)
+        
+        # Пробуем отредактировать сообщение, если оно ещё существует
+        try:
+            bot.edit_message_text(error_text, message.chat.id, msg.message_id)
+        except:
+            bot.reply_to(message, error_text)
+            
         logger.error(f"Ошибка оживления: {str(e)}")
         
         # Пробуем удалить временный файл в случае ошибки
@@ -177,7 +149,7 @@ def animate_photo(message):
 # ============================================
 if __name__ == "__main__":
     logger.info("=" * 50)
-    logger.info("🚀 Бот с Haiper запускается...")
+    logger.info("🚀 Финальная версия бота запускается...")
     logger.info(f"🤖 Bot Token: {'✅' if BOT_TOKEN else '❌'}")
     logger.info(f"🔄 Replicate Token: {'✅' if REPLICATE_TOKEN else '❌'}")
     logger.info("=" * 50)

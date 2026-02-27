@@ -23,13 +23,12 @@ bot = telebot.TeleBot(BOT_TOKEN)
 @bot.message_handler(commands=['start'])
 def start(message):
     bot.reply_to(message, 
-        "👋 Привет! Я SceneForgeBot (стабильная версия)!\n\n"
+        "👋 Привет! Я SceneForgeBot!\n\n"
         "📸 **Отправь фото** — я оживлю\n"
         "🎬 **/video текст** — видео из текста\n"
         "💬 **Просто напиши** — отвечу"
     )
 
-# Видео из текста (рабочая версия)
 @bot.message_handler(commands=['video'])
 def generate_video(message):
     prompt = message.text.replace('/video', '').strip()
@@ -51,21 +50,17 @@ def generate_video(message):
     except Exception as e:
         bot.edit_message_text(f"❌ Ошибка: {str(e)}", message.chat.id, msg.message_id)
 
-# Оживление фото (новая функция)
 @bot.message_handler(content_types=['photo'])
 def animate_photo(message):
     msg = bot.reply_to(message, "🎬 Оживляю фото...")
     
     try:
-        # Скачиваем фото
         file_info = bot.get_file(message.photo[-1].file_id)
         photo = bot.download_file(file_info.file_path)
         
-        # Сохраняем
         with open('photo.jpg', 'wb') as f:
             f.write(photo)
         
-        # Загружаем на Replicate через API напрямую
         with open('photo.jpg', 'rb') as f:
             response = requests.post(
                 "https://api.replicate.com/v1/predictions",
@@ -89,7 +84,6 @@ def animate_photo(message):
     except Exception as e:
         bot.edit_message_text(f"❌ Ошибка: {str(e)}", message.chat.id, msg.message_id)
 
-# Общение
 @bot.message_handler(func=lambda message: True)
 def chat(message):
     bot.send_chat_action(message.chat.id, 'typing')
@@ -103,7 +97,7 @@ def chat(message):
         bot.reply_to(message, f"❌ Ошибка: {str(e)}")
 
 if __name__ == "__main__":
-    print("🚀 Стабильная версия запущена!")
+    print("🚀 Бот запущен!")
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60)

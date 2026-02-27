@@ -47,7 +47,7 @@ def start(message):
     logger.info(f"Команда /start от пользователя {message.from_user.id}")
 
 # ============================================
-# ВИДЕО ИЗ ТЕКСТА (работает)
+# ВИДЕО ИЗ ТЕКСТА
 # ============================================
 @bot.message_handler(commands=['video'])
 def generate_video(message):
@@ -77,7 +77,7 @@ def generate_video(message):
         logger.error(f"Ошибка видео: {str(e)}")
 
 # ============================================
-# ОЖИВЛЕНИЕ ФОТО (новая функция)
+# ОЖИВЛЕНИЕ ФОТО (ИСПРАВЛЕНО)
 # ============================================
 @bot.message_handler(content_types=['photo'])
 def animate_photo(message):
@@ -102,7 +102,7 @@ def animate_photo(message):
                 "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
                 input={
                     "input_image": f,
-                    "video_length": 14,  # количество кадров
+                    "video_length": "14",  # ИСПРАВЛЕНО: теперь строка
                     "sizing_strategy": "maintain_aspect_ratio",
                     "frames_per_second": 6
                 }
@@ -129,7 +129,7 @@ def animate_photo(message):
             pass
 
 # ============================================
-# ОБЩЕНИЕ ЧЕРЕЗ OPENAI (работает)
+# ОБЩЕНИЕ ЧЕРЕЗ OPENAI
 # ============================================
 @bot.message_handler(func=lambda message: True)
 def chat(message):

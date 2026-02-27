@@ -35,7 +35,7 @@ def start(message):
         "👋 Привет! Я SceneForgeBot (версия для фото и видео)!\n\n"
         "📸 **Отправь фото** — я оживлю его (сделаю видео)\n"
         "🎬 **/video текст** — видео из текста\n\n"
-        "⚡ Функции работают!"
+        "⚡ Все функции работают!"
     )
     bot.reply_to(message, welcome_text)
     logger.info(f"Команда /start от пользователя {message.from_user.id}")
@@ -61,7 +61,15 @@ def generate_video(message):
         )
         
         bot.delete_message(message.chat.id, msg.message_id)
-        video_url = output[0] if isinstance(output, list) else output
+        
+        # Извлекаем ссылку на видео
+        if isinstance(output, list):
+            video_url = output[0]
+        elif isinstance(output, str):
+            video_url = output
+        else:
+            video_url = str(output)
+            
         bot.send_message(message.chat.id, f"✅ Видео готово!\n{video_url}")
         logger.info(f"Видео успешно сгенерировано для пользователя {message.from_user.id}")
         
@@ -71,7 +79,7 @@ def generate_video(message):
         logger.error(f"Ошибка видео: {str(e)}")
 
 # ============================================
-# ОЖИВЛЕНИЕ ФОТО
+# ОЖИВЛЕНИЕ ФОТО (ИСПРАВЛЕНО)
 # ============================================
 @bot.message_handler(content_types=['photo'])
 def animate_photo(message):
@@ -90,13 +98,13 @@ def animate_photo(message):
         with open(temp_filename, 'wb') as f:
             f.write(photo)
         
-        # 3. Открываем файл и отправляем в Replicate
+        # 3. Открываем файл и отправляем в Replicate с правильными параметрами
         with open(temp_filename, 'rb') as f:
             output = replicate.run(
                 "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
                 input={
                     "input_image": f,
-                    "video_length": "14",
+                    "video_length": "14_frames_with_svd",  # ИСПРАВЛЕНО: правильное значение
                     "sizing_strategy": "maintain_aspect_ratio",
                     "frames_per_second": 6
                 }
@@ -107,7 +115,15 @@ def animate_photo(message):
         
         # 5. Отправляем результат пользователю
         bot.delete_message(message.chat.id, msg.message_id)
-        video_url = output[0] if isinstance(output, list) else output
+        
+        # Извлекаем ссылку на видео
+        if isinstance(output, list):
+            video_url = output[0]
+        elif isinstance(output, str):
+            video_url = output
+        else:
+            video_url = str(output)
+            
         bot.send_message(message.chat.id, f"✅ Фото ожило!\n{video_url}")
         logger.info(f"Фото успешно оживлено для пользователя {message.from_user.id}")
         

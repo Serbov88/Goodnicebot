@@ -19,38 +19,31 @@ os.environ["REPLICATE_API_TOKEN"] = REPLICATE_TOKEN
 openai.api_key = OPENAI_API_KEY
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Команда /start
+# Системный промпт для OpenAI (как ты)
+SYSTEM_PROMPT = """
+Ты — дружелюбный ИИ-ассистент по имени SceneForgeBot.
+Твоя задача — общаться с пользователем, отвечать на вопросы и выполнять запросы.
+Если пользователь просит нарисовать что-то — отвечай: '/image запрос'
+Если пользователь просит видео — отвечай: '/video запрос'
+Если просто болтает — общайся как человек.
+Ты — точная копия моего друга, который помогает мне с кодом и жизнью.
+"""
+
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, 
-        "👋 Привет! Я SceneForgeBot!\n\n"
-        "🎬 **/video** текст — видео из текста\n"
-        "🖼️ **/image** текст — картинка\n"
-        "💬 **/chat** текст — общение\n"
-        "📋 **/help** — список команд"
-    )
+    bot.reply_to(message, "👋 Привет! Я SceneForgeBot! Просто пиши что хочешь — сделаю.")
 
-@bot.message_handler(commands=['help'])
-def help(message):
-    bot.reply_to(message,
-        "📋 **Команды:**\n"
-        "/video робот танцует — видео\n"
-        "/image кот в космосе — картинка\n"
-        "/chat как дела? — общение"
-    )
-
-# Генерация видео из текста (Haiper)
 @bot.message_handler(commands=['video'])
 def generate_video(message):
     prompt = message.text.replace('/video', '').strip()
     if not prompt:
-        bot.reply_to(message, "Напиши запрос после /video")
+        bot.reply_to(message, "Что именно хочешь увидеть в видео?")
         return
         
-    msg = bot.reply_to(message, "🎥 Генерирую видео из текста...")
+    msg = bot.reply_to(message, "🎥 Генерирую видео...")
     try:
         output = replicate.run(
-            "haiper-ai/haiper-video-2:latest",
+            "lucataco/animate-diff:beecf59c4aee8d81bf04f0381033dfa10dc16e845b4ae00d281e2fa377e48a9f",
             input={"prompt": prompt}
         )
         bot.delete_message(message.chat.id, msg.message_id)
@@ -65,15 +58,14 @@ def generate_video(message):
     except Exception as e:
         bot.edit_message_text(f"❌ Ошибка видео: {str(e)}", message.chat.id, msg.message_id)
 
-# Генерация картинки через OpenAI DALL-E
 @bot.message_handler(commands=['image'])
 def generate_image(message):
     prompt = message.text.replace('/image', '').strip()
     if not prompt:
-        bot.reply_to(message, "Напиши запрос после /image")
+        bot.reply_to(message, "Что именно нарисовать?")
         return
         
-    msg = bot.reply_to(message, "🎨 Рисую картинку...")
+    msg = bot.reply_to(message, "🎨 Рисую...")
     try:
         response = openai.Image.create(
             prompt=prompt,
@@ -82,35 +74,80 @@ def generate_image(message):
         )
         image_url = response['data'][0]['url']
         bot.delete_message(message.chat.id, msg.message_id)
-        bot.send_photo(message.chat.id, image_url, caption=f"✅ Картинка: {prompt}")
+        bot.send_photo(message.chat.id, image_url, caption=f"✅ {prompt}")
         
     except Exception as e:
-        bot.edit_message_text(f"❌ Ошибка картинки: {str(e)}", message.chat.id, msg.message_id)
+        bot.edit_message_text(f"❌ Ошибка: {str(e)}", message.chat.id, msg.message_id)
 
-# Обычный диалог через ChatGPT
-@bot.message_handler(commands=['chat'])
-def chat(message):
-    prompt = message.text.replace('/chat', '').strip()
-    if not prompt:
-        bot.reply_to(message, "Напиши сообщение после /chat")
-        return
-        
-    msg = bot.reply_to(message, "💬 Думаю...")
+# Главный умный обработчик
+@bot.message_handler(func=lambda message: True)
+def smart_handler(message):
+    # Показываем что печатает
+    bot.send_chat_action(message.chat.id, 'typing')
+    
     try:
+        # Отправляем запрос в OpenAI
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": message.text}
+            ]
         )
-        answer = response.choices[0].message.content
-        bot.delete_message(message.chat.id, msg.message_id)
-        bot.send_message(message.chat.id, f"💬 {answer}")
         
+        answer = response.choices[0].message.content.strip()
+        
+        # Если OpenAI предлагает команду — выполняем
+        if answer.startswith('/video'):
+            # Извлекаем запрос и вызываем функцию видео
+            prompt = answer.replace('/video', '').strip()
+            generate_video_with_text(message, prompt)
+        elif answer.startswith('/image'):
+            # Извлекаем запрос и вызываем функцию картинки
+            prompt = answer.replace('/image', '').strip()
+            generate_image_with_text(message, prompt)
+        else:
+            # Просто отвечаем
+            bot.reply_to(message, answer)
+            
     except Exception as e:
-        bot.edit_message_text(f"❌ Ошибка чата: {str(e)}", message.chat.id, msg.message_id)
+        bot.reply_to(message, f"❌ Ошибка: {str(e)}")
 
-# Запуск
+# Вспомогательные функции для вызова из умного обработчика
+def generate_video_with_text(message, prompt):
+    msg = bot.reply_to(message, "🎥 Делаю видео...")
+    try:
+        output = replicate.run(
+            "lucataco/animate-diff:beecf59c4aee8d81bf04f0381033dfa10dc16e845b4ae00d281e2fa377e48a9f",
+            input={"prompt": prompt}
+        )
+        bot.delete_message(message.chat.id, msg.message_id)
+        
+        if output and isinstance(output, list):
+            bot.send_message(message.chat.id, f"✅ Вот видео: {output[0]}")
+        elif output:
+            bot.send_message(message.chat.id, f"✅ Вот видео: {output}")
+        else:
+            bot.send_message(message.chat.id, "❌ Не вышло")
+    except Exception as e:
+        bot.edit_message_text(f"❌ Ошибка: {str(e)}", message.chat.id, msg.message_id)
+
+def generate_image_with_text(message, prompt):
+    msg = bot.reply_to(message, "🎨 Рисую...")
+    try:
+        response = openai.Image.create(
+            prompt=prompt,
+            n=1,
+            size="1024x1024"
+        )
+        image_url = response['data'][0]['url']
+        bot.delete_message(message.chat.id, msg.message_id)
+        bot.send_photo(message.chat.id, image_url, caption=f"✅ {prompt}")
+    except Exception as e:
+        bot.edit_message_text(f"❌ Ошибка: {str(e)}", message.chat.id, msg.message_id)
+
 if __name__ == "__main__":
-    print("🚀 Бот запущен с видео (Haiper), фото (DALL-E) и чатом (ChatGPT)!")
+    print("🚀 Умный бот запущен!")
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60)

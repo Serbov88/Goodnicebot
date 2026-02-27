@@ -1,94 +1,11 @@
-import os
-import telebot
-import replicate
-import time
-import logging
-
-# Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-# Токены из переменных окружения
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
-REPLICATE_TOKEN = os.environ.get('REPLICATE_TOKEN')
-
-# Проверка токенов
-if not BOT_TOKEN:
-    raise ValueError("❌ Отсутствует BOT_TOKEN")
-if not REPLICATE_TOKEN:
-    raise ValueError("❌ Отсутствует REPLICATE_TOKEN")
-
-# Устанавливаем токен Replicate
-os.environ["REPLICATE_API_TOKEN"] = REPLICATE_TOKEN
-
-# Создаем бота
-bot = telebot.TeleBot(BOT_TOKEN)
-logger.info("✅ Бот инициализирован")
-
-# ============================================
-# КОМАНДА /start
-# ============================================
-@bot.message_handler(commands=['start'])
-def start(message):
-    """Приветствие и инструкции"""
-    welcome_text = (
-        "👋 Привет! Я SceneForgeBot (версия для фото и видео)!\n\n"
-        "📸 **Отправь фото** — я оживлю его (сделаю видео)\n"
-        "🎬 **/video текст** — видео из текста\n\n"
-        "⚡ Все функции работают!"
-    )
-    bot.reply_to(message, welcome_text)
-    logger.info(f"Команда /start от пользователя {message.from_user.id}")
-
-# ============================================
-# ВИДЕО ИЗ ТЕКСТА
-# ============================================
-@bot.message_handler(commands=['video'])
-def generate_video(message):
-    """Генерация видео из текста"""
-    prompt = message.text.replace('/video', '').strip()
-    if not prompt:
-        bot.reply_to(message, "❌ Напиши запрос после /video, например: /video робот танцует")
-        return
-    
-    msg = bot.reply_to(message, "🎥 Генерирую видео из текста... (около 30 секунд)")
-    logger.info(f"Запрос видео: {prompt[:50]}... от пользователя {message.from_user.id}")
-    
-    try:
-        output = replicate.run(
-            "lucataco/animate-diff:beecf59c4aee8d81bf04f0381033dfa10dc16e845b4ae00d281e2fa377e48a9f",
-            input={"prompt": prompt}
-        )
-        
-        bot.delete_message(message.chat.id, msg.message_id)
-        
-        # Извлекаем ссылку на видео
-        if isinstance(output, list):
-            video_url = output[0]
-        elif isinstance(output, str):
-            video_url = output
-        else:
-            video_url = str(output)
-            
-        bot.send_message(message.chat.id, f"✅ Видео готово!\n{video_url}")
-        logger.info(f"Видео успешно сгенерировано для пользователя {message.from_user.id}")
-        
-    except Exception as e:
-        error_text = f"❌ Ошибка видео: {str(e)}"
-        bot.edit_message_text(error_text, message.chat.id, msg.message_id)
-        logger.error(f"Ошибка видео: {str(e)}")
-
-# ============================================
-# ОЖИВЛЕНИЕ ФОТО (ИСПРАВЛЕНО)
-# ============================================
 @bot.message_handler(content_types=['photo'])
 def animate_photo(message):
-    """Оживление фотографии через Stable Video Diffusion"""
+    """Оживление фотографии через прямой API-запрос"""
     msg = bot.reply_to(message, "🎬 Оживляю фото... Это займет около минуты")
     logger.info(f"Получено фото от пользователя {message.from_user.id}")
     
     try:
-        # 1. Скачиваем фото от пользователя
+        # 1. Скачиваем фото
         file_info = bot.get_file(message.photo[-1].file_id)
         photo = bot.download_file(file_info.file_path)
         logger.info(f"Фото скачано, размер: {len(photo)} байт")
@@ -98,60 +15,69 @@ def animate_photo(message):
         with open(temp_filename, 'wb') as f:
             f.write(photo)
         
-        # 3. Открываем файл и отправляем в Replicate с правильными параметрами
+        # 3. Отправляем через прямой API-запрос
+        import requests
+        
         with open(temp_filename, 'rb') as f:
-            output = replicate.run(
-                "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
-                input={
-                    "input_image": f,
-                    "video_length": "14_frames_with_svd",  # ИСПРАВЛЕНО: правильное значение
-                    "sizing_strategy": "maintain_aspect_ratio",
-                    "frames_per_second": 6
-                }
+            # Сначала загружаем файл
+            files = {'file': f}
+            upload_response = requests.post(
+                "https://api.replicate.com/v1/files",
+                headers={"Authorization": f"Token {REPLICATE_TOKEN}"},
+                files=files
             )
+            
+            if upload_response.status_code == 201:
+                file_url = upload_response.json()['urls']['get']
+                
+                # Создаём предсказание с правильными параметрами
+                prediction_response = requests.post(
+                    "https://api.replicate.com/v1/predictions",
+                    headers={
+                        "Authorization": f"Token {REPLICATE_TOKEN}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "version": "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
+                        "input": {
+                            "input_image": file_url,
+                            "video_length": "14_frames_with_svd",
+                            "sizing_strategy": "maintain_aspect_ratio",
+                            "frames_per_second": 6
+                        }
+                    }
+                )
+                
+                if prediction_response.status_code == 201:
+                    data = prediction_response.json()
+                    bot.delete_message(message.chat.id, msg.message_id)
+                    bot.send_message(
+                        message.chat.id, 
+                        f"✅ Фото в обработке!\n"
+                        f"ID: {data['id']}\n"
+                        f"Статус: {data['status']}\n"
+                        f"Через минуту видео будет готово, ссылка: {data['urls']['get']}"
+                    )
+                else:
+                    bot.edit_message_text(
+                        f"❌ Ошибка создания предсказания: {prediction_response.status_code}\n{prediction_response.text}", 
+                        message.chat.id, msg.message_id
+                    )
+            else:
+                bot.edit_message_text(
+                    f"❌ Ошибка загрузки фото: {upload_response.status_code}\n{upload_response.text}", 
+                    message.chat.id, msg.message_id
+                )
         
         # 4. Удаляем временный файл
         os.remove(temp_filename)
-        
-        # 5. Отправляем результат пользователю
-        bot.delete_message(message.chat.id, msg.message_id)
-        
-        # Извлекаем ссылку на видео
-        if isinstance(output, list):
-            video_url = output[0]
-        elif isinstance(output, str):
-            video_url = output
-        else:
-            video_url = str(output)
-            
-        bot.send_message(message.chat.id, f"✅ Фото ожило!\n{video_url}")
-        logger.info(f"Фото успешно оживлено для пользователя {message.from_user.id}")
         
     except Exception as e:
         error_text = f"❌ Ошибка оживления: {str(e)}"
         bot.edit_message_text(error_text, message.chat.id, msg.message_id)
         logger.error(f"Ошибка оживления: {str(e)}")
         
-        # Пробуем удалить временный файл, если он остался
         try:
             os.remove(temp_filename)
         except:
             pass
-
-# ============================================
-# ЗАПУСК БОТА
-# ============================================
-if __name__ == "__main__":
-    logger.info("=" * 50)
-    logger.info("🚀 Бот запускается...")
-    logger.info(f"🤖 Bot Token: {'✅' if BOT_TOKEN else '❌'}")
-    logger.info(f"🔄 Replicate Token: {'✅' if REPLICATE_TOKEN else '❌'}")
-    logger.info("=" * 50)
-    
-    # Бесконечный цикл с обработкой ошибок
-    while True:
-        try:
-            bot.infinity_polling(timeout=60, long_polling_timeout=60)
-        except Exception as e:
-            logger.error(f"Ошибка в основном цикле: {e}")
-            time.sleep(5)

@@ -25,7 +25,7 @@ def generate(message):
     try:
         # Правильная модель Kling
         output = replicate.run(
-            "kling-ai/kling-video:v1.6",
+            "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
             input={"prompt": message.text}
         )
         bot.delete_message(message.chat.id, msg.message_id)

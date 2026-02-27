@@ -33,10 +33,10 @@ def generate(message):
         bot.edit_message_text(f"❌ Ошибка: {str(e)}", message.chat.id, msg.message_id)
 
 if __name__ == "__main__":
-    logging.info("Бот запущен!")
+    print("🚀 Бот запущен!")
     while True:
         try:
-            bot.infinity_polling()
+            bot.infinity_polling(timeout=60, long_polling_timeout=60)
         except Exception as e:
-            logging.error(f"Ошибка: {e}")
+            print(f"Ошибка: {e}")
             time.sleep(5)
